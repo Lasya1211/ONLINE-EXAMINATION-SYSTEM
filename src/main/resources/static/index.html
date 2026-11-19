@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Online Examination System</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f0f4f8;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            background: white;
+            max-width: 600px;
+            width: 100%;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1 { text-align: center; color: #1e3a8a; margin-bottom: 5px; }
+        p.subtitle { text-align: center; color: #64748b; margin-top: 0; }
+        .input-group { margin: 20px 0; }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        .question-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .question-title { font-weight: bold; margin-bottom: 10px; color: #0f172a; }
+        .option-label {
+            display: block;
+            padding: 8px;
+            margin: 5px 0;
+            background: white;
+            border: 1px solid #cbd5e1;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .option-label:hover { background: #eff6ff; }
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover { background-color: #1d4ed8; }
+        .hidden { display: none; }
+        .result-box {
+            text-align: center;
+            padding: 20px;
+            background: #ecfdf5;
+            border: 2px solid #10b981;
+            border-radius: 8px;
+        }
+        .fail-box {
+            background: #fef2f2;
+            border-color: #ef4444;
+        }
+        .timer {
+            text-align: right;
+            font-weight: bold;
+            color: #dc2626;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Online Exam Portal</h1>
+    <p class="subtitle">Java Mini Project</p>
+
+    <div id="login-section">
+        <div class="input-group">
+            <label><strong>Enter Student Full Name:</strong></label>
+            <input type="text" id="studentName" placeholder="e.g., Rahul Sharma" required>
+        </div>
+        <button onclick="startExam()">Start Examination</button>
+    </div>
+
+    <div id="exam-section" class="hidden">
+        <div class="timer" id="timer">Time Left: 05:00</div>
+        <div id="questions-container"></div>
+        <button onclick="submitExam()">Submit Exam</button>
+    </div>
+
+    <div id="result-section" class="hidden">
+        <div id="result-card" class="result-box">
+            <h2 id="res-status">PASS</h2>
+            <p><strong>Student:</strong> <span id="res-name"></span></p>
+            <p style="font-size: 24px; font-weight: bold;">Score: <span id="res-score"></span></p>
+        </div>
+        <button onclick="location.reload()">Take Exam Again</button>
+    </div>
+</div>
+
+<script>
+    let questionsData = [];
+    let timeLeft = 300;
+    let timerInterval;
+
+    async function startExam() {
+        const name = document.getElementById("studentName").value.trim();
+        if (!name) {
+            alert("Please enter your name before starting!");
+            return;
+        }
+
+        try {
+            const response = await fetch("/api/questions");
+            if (!response.ok) {
+                alert("Backend Error: " + response.status);
+                return;
+            }
+            questionsData = await response.json();
+
+            const container = document.getElementById("questions-container");
+            container.innerHTML = "";
+
+            for (let i = 0; i < questionsData.length; i++) {
+                let q = questionsData[i];
+                let optionsHtml = "";
+                for (let j = 0; j < q.options.length; j++) {
+                    let opt = q.options[j];
+                    optionsHtml += '<label class="option-label"><input type="radio" name="q_' + q.id + '" value="' + j + '"> ' + opt + '</label>';
+                }
+
+                container.innerHTML += '<div class="question-card"><div class="question-title">' + (i + 1) + '. ' + q.question + '</div>' + optionsHtml + '</div>';
+            }
+
+            document.getElementById("login-section").classList.add("hidden");
+            document.getElementById("exam-section").classList.remove("hidden");
+            startTimer();
+        } catch (error) {
+            alert("Error: " + error);
+        }
+    }
+
+    function startTimer() {
+        timerInterval = setInterval(function() {
+            timeLeft--;
+            let mins = Math.floor(timeLeft / 60);
+            let secs = timeLeft % 60;
+            let secText = secs < 10 ? "0" + secs : secs;
+            document.getElementById("timer").innerText = "Time Left: 0" + mins + ":" + secText;
+            if (timeLeft <= 0) {
+                clearInterval(timerInterval);
+                submitExam();
+            }
+        }, 1000);
+    }
+
+    async function submitExam() {
+        clearInterval(timerInterval);
+        const studentName = document.getElementById("studentName").value.trim();
+        let selectedAnswers = {};
+
+        for (let i = 0; i < questionsData.length; i++) {
+            let q = questionsData[i];
+            let selected = document.querySelector('input[name="q_' + q.id + '"]:checked');
+            if (selected) {
+                selectedAnswers[q.id] = parseInt(selected.value);
+            }
+        }
+
+        const response = await fetch("/api/submit", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ studentName: studentName, answers: selectedAnswers })
+        });
+
+        const result = await response.json();
+
+        document.getElementById("exam-section").classList.add("hidden");
+        document.getElementById("result-section").classList.remove("hidden");
+
+        document.getElementById("res-name").innerText = result.studentName;
+        document.getElementById("res-score").innerText = result.score + " / " + result.total;
+        document.getElementById("res-status").innerText = "Result: " + result.status;
+
+        if (result.status === "FAIL") {
+            document.getElementById("result-card").classList.add("fail-box");
+        }
+    }
+</script>
+
+</body>
+</html>
